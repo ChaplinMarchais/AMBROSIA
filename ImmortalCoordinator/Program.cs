@@ -20,12 +20,20 @@ namespace CRA.Worker
         private static string _secureNetworkClassName;
         private static bool _isActiveActive = false;
         private static int _replicaNumber = 0;
+        private static string _replicaName = null;
 
         static void Main(string[] args)
         {
             ParseAndValidateOptions(args);
 
-            var replicaName = $"{_instanceName}{_replicaNumber}";
+            if (_replicaName == null)
+            {
+                _replicaName = $"{_instanceName}{_replicaNumber}";
+            }
+            else
+            {
+                _replicaName = $"{_instanceName}{_replicaName}";
+            }
 
             if (_ipAddress == null)
             {
@@ -41,11 +49,6 @@ namespace CRA.Worker
             if (storageConnectionString == null)
             {
                 storageConnectionString = Environment.GetEnvironmentVariable("AZURE_STORAGE_CONN_STRING");
-            }
-
-            if (!_isActiveActive && _replicaNumber != 0)
-            {
-                throw new InvalidOperationException("Can't specify a replica number without the activeActive flag");
             }
 
             if (storageConnectionString == null)
@@ -91,7 +94,7 @@ namespace CRA.Worker
             }
 
             var worker = new CRAWorker
-                (replicaName, _ipAddress, _port,
+                (_replicaName, _ipAddress, _port,
                 storageConnectionString, descriptor, connectionsPoolPerWorker);
 
             worker.DisableDynamicLoading();
@@ -127,6 +130,7 @@ namespace CRA.Worker
                 { "p|port=", "An port number [REQUIRED].", p => _port = Int32.Parse(p) },
                 {"aa|activeActive", "Is active-active enabled.", aa => _isActiveActive = true},
                 { "r|replicaNum=", "The replica #", r => { _replicaNumber = int.Parse(r); _isActiveActive=true; } },
+                { "rn|replicaName", "In some rare deployments, a needed alternative to using numerical replica naming scheme with replica numbers", rn => {_replicaName = rn; _isActiveActive = true; } },
                 { "an|assemblyName=", "The secure network assembly name.", an => _secureNetworkAssemblyName = an },
                 { "ac|assemblyClass=", "The secure network assembly class.", ac => _secureNetworkClassName = ac },
                 { "ip|IPAddr=", "Override automatic self IP detection", i => _ipAddress = i },
@@ -152,6 +156,7 @@ namespace CRA.Worker
         private static void ValidateOptions(OptionSet options, bool shouldShowHelp)
         {
             var errorMessage = string.Empty;
+            if (_replicaName != null && _replicaNumber != 0) errorMessage += "Cannot specify both a replicaName and replicaNumber. They are alternative naming schemes for replicas\n";
             if (_instanceName == null) errorMessage += "Instance name is required.";
             if (_port == -1) errorMessage += "Port number is required.";
 

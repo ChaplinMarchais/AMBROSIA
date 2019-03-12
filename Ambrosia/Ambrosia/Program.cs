@@ -3543,6 +3543,7 @@ namespace Ambrosia
         private static LocalAmbrosiaRuntimeModes _runtimeMode;
         private static string _instanceName = null;
         private static int _replicaNumber = 0;
+        private static string _replicaName = null;
         private static int _serviceReceiveFromPort = -1;
         private static int _serviceSendToPort = -1;
         private static string _serviceLogPath = Path.Combine(Path.GetPathRoot(Path.GetFullPath(".")), "AmbrosiaLogs") + Path.DirectorySeparatorChar;
@@ -3577,7 +3578,14 @@ namespace Ambrosia
                     var client = new CRAClientLibrary(Environment.GetEnvironmentVariable("AZURE_STORAGE_CONN_STRING"));
                     client.DisableArtifactUploading();
 
-                    var replicaName = $"{_instanceName}{_replicaNumber}";
+                    if (_replicaName == null)
+                    {
+                        _replicaName = $"{_instanceName}{_replicaNumber}";
+                    }
+                    else
+                    {
+                        _replicaName = $"{_instanceName}{_replicaName}";
+                    }
                     AmbrosiaRuntimeParams param = new AmbrosiaRuntimeParams();
                     param.createService = _recoveryMode == AmbrosiaRecoveryModes.A
                         ? (bool?)null
@@ -3611,7 +3619,7 @@ namespace Ambrosia
                             serializedParams = textWriter.ToString();
                         }
 
-                        if (client.InstantiateVertex(replicaName, param.serviceName, param.AmbrosiaBinariesLocation, serializedParams) != CRAErrorCode.Success)
+                        if (client.InstantiateVertex(_replicaName, param.serviceName, param.AmbrosiaBinariesLocation, serializedParams) != CRAErrorCode.Success)
                         {
                             throw new Exception();
                         }
@@ -3665,6 +3673,7 @@ namespace Ambrosia
                 {"npl|noPersistLogs", "Is persistent logging disabled.", ps => _isPersistLogs = false},
                 {"lts|logTriggerSize=", "Log trigger size (in MBs).", lts => _logTriggerSizeMB = long.Parse(lts)},
                 {"aa|activeActive", "Is active-active enabled.", aa => _isActiveActive = true},
+                {"rn|replicaName", "In some rare deployments, a needed alternative to using numerical replica naming scheme with replica numbers", rn => _replicaName = rn},
                 {"cv|currentVersion=", "The current version #.", cv => _currentVersion = int.Parse(cv)},
                 {"uv|upgradeVersion=", "The upgrade version #.", uv => _upgradeVersion = int.Parse(uv)},
             });
@@ -3745,14 +3754,19 @@ namespace Ambrosia
         private static void ValidateOptions(OptionSet options, bool shouldShowHelp)
         {
             var errorMessage = string.Empty;
+            if (_replicaName != null && _replicaNumber != 0) errorMessage += "Cannot specify both a replicaName and replicaNumber. They are alternative naming schemes for replicas\n";
             if (_instanceName == null) errorMessage += "Instance name is required.\n";
             if (_serviceReceiveFromPort == -1) errorMessage += "Receive port is required.\n";
             if (_serviceSendToPort == -1) errorMessage += "Send port is required.\n";
+            if (_runtimeMode == LocalAmbrosiaRuntimeModes.RegisterInstance)
+            {
+                if (!_isActiveActive && _replicaName != null) errorMessage += "Cannot specify a replica name in non active-active configurations since there are no replicas\n";
+            }
             if (_runtimeMode == LocalAmbrosiaRuntimeModes.AddReplica)
             {
-                if (_replicaNumber == 0)
+                if (_replicaNumber == 0 && _replicaName == null)
                 {
-                    errorMessage += "Replica number is required.\n";
+                    errorMessage += "Replica number ( > 0 ) or replica name is required.\n";
                 }
             }
 
